@@ -154,6 +154,36 @@ nanobot agent
 
 That's it! You have a working AI assistant in 2 minutes.
 
+## 🏢 Intranet Minimal Deployment (for internal digital services)
+
+If your enterprise can only access internal network services and uses an open-source-level base model,
+you can keep only nanobot's core design and deploy a robust tool hub with one file:
+
+1. **Interleaved CoT + XML tags**: force model output `<think>` and `<tool_call>` before tool execution.
+2. **`json_repair` parser**: repair malformed JSON from weaker models.
+3. **Plain-text memory**: append-only local memory + keyword search.
+4. **Tool registry**: wrap existing intranet APIs as Python functions.
+
+Run the minimal agent:
+
+```bash
+python -m nanobot.intranet \
+  --base-url http://your-internal-llm-gateway \
+  --api-key your-token \
+  --model internal-llm-model
+```
+
+Then register your own internal services in `nanobot/intranet.py` with the decorator pattern:
+
+```python
+@registry.register("query_bi_report", "查询BI报表，参数: report_id/date")
+def query_bi_report(report_id: str, date: str):
+    return your_internal_api(report_id, date)
+```
+
+This path is intended for teams that need the **smallest possible, directly-runnable** intranet tool layer
+without external channel dependencies.
+
 ## 💬 Chat Apps
 
 Connect nanobot to your favorite chat platform.
