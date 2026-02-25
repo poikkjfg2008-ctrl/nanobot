@@ -184,6 +184,15 @@ def query_bi_report(report_id: str, date: str):
 This path is intended for teams that need the **smallest possible, directly-runnable** intranet tool layer
 without external channel dependencies.
 
+For a higher-completion internal orchestration service (FastAPI + tool hub + weak-model tool-call repair),
+use the new module:
+
+```bash
+nanobot-internal
+```
+
+Detailed design and rollout plan: `nanobot/internal_orchestrator/PLAN.md`.
+
 ## 💬 Chat Apps
 
 Connect nanobot to your favorite chat platform.
