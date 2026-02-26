@@ -63,6 +63,8 @@ class IntranetAgentConfig:
     api_key: str
     model: str = "internal-llm-model"
     timeout_s: float = 30.0
+    temperature: float = 0.1
+    max_tokens: int | None = None
 
 
 class IntranetNanoAgent:
@@ -94,15 +96,20 @@ class IntranetNanoAgent:
         payload = {
             "model": self.config.model,
             "messages": self.messages,
-            "temperature": 0.1,
+            "temperature": self.config.temperature,
         }
+        if self.config.max_tokens is not None:
+            payload["max_tokens"] = self.config.max_tokens
         endpoint = f"{self.config.base_url.rstrip('/')}/v1/chat/completions"
         import httpx
 
         response = httpx.post(endpoint, json=payload, headers=headers, timeout=self.config.timeout_s)
         response.raise_for_status()
         body = response.json()
-        return body["choices"][0]["message"]["content"]
+        try:
+            return body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ValueError(f"Internal LLM response format error: {body}") from exc
 
     @staticmethod
     def _extract_tool_call(content: str) -> str | None:
@@ -175,10 +182,20 @@ def run_cli() -> None:
     parser.add_argument("--api-key", required=True, help="Internal LLM API key")
     parser.add_argument("--model", default="internal-llm-model", help="Model name")
     parser.add_argument("--memory-file", default="internal_session_memory.log", help="Memory file path")
+    parser.add_argument("--temperature", type=float, default=0.1, help="Sampling temperature")
+    parser.add_argument("--timeout-s", type=float, default=30.0, help="HTTP timeout in seconds")
+    parser.add_argument("--max-tokens", type=int, default=None, help="Optional max_tokens for responses")
     args = parser.parse_args()
 
     agent = IntranetNanoAgent(
-        config=IntranetAgentConfig(base_url=args.base_url, api_key=args.api_key, model=args.model),
+        config=IntranetAgentConfig(
+            base_url=args.base_url,
+            api_key=args.api_key,
+            model=args.model,
+            timeout_s=args.timeout_s,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+        ),
         registry=build_demo_registry(),
         memory=TextMemory(args.memory_file),
     )

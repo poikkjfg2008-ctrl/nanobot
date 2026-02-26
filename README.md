@@ -193,6 +193,9 @@ nanobot-internal
 
 Detailed design and rollout plan: `nanobot/internal_orchestrator/PLAN.md`.
 
+Chinese step-by-step deployment tutorial (local LLM API + Markdown tool service + scheduled daily report/project intro): `nanobot/internal_orchestrator/MINIMAL_DEPLOYMENT_ZH.md`.
+
+
 ## 💬 Chat Apps
 
 Connect nanobot to your favorite chat platform.
