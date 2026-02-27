@@ -790,6 +790,8 @@ That's it! Environment variables, model prefixing, config matching, and `nanobot
 
 nanobot supports [MCP](https://modelcontextprotocol.io/) — connect external tool servers and use them as native agent tools.
 
+> Architecture note: Skill context, default tool registration, and MCP lifecycle are now composed by an application orchestration environment (`nanobot/application/orchestration/environment.py`), while `AgentLoop` focuses on message/tool-call control flow.
+
 Add MCP servers to your `config.json`:
 
 ```json
@@ -1007,6 +1009,7 @@ nanobot/
 │   ├── subagent.py #    Background task execution
 │   └── tools/      #    Built-in tools (incl. spawn)
 ├── skills/         # 🎯 Bundled skills (github, weather, tmux...)
+├── application/    # 🧩 App-layer orchestration environment
 ├── channels/       # 📱 Chat channel integrations
 ├── bus/            # 🚌 Message routing
 ├── cron/           # ⏰ Scheduled tasks
