@@ -111,8 +111,8 @@ pip install nanobot-ai
 ## 🚀 Quick Start
 
 > [!TIP]
-> Set your API key in `~/.nanobot/config.json`.
-> Get API keys: [OpenRouter](https://openrouter.ai/keys) (Global) · [Brave Search](https://brave.com/search/api/) (optional, for web search)
+> In this intranet-ready build, only **Ollama** and **vLLM** are supported for inference.
+> Configure local endpoints in `~/.nanobot/config.json`.
 
 **1. Initialize**
 
@@ -124,12 +124,25 @@ nanobot onboard
 
 Add or merge these **two parts** into your config (other options have defaults).
 
-*Set your API key* (e.g. OpenRouter, recommended for global users):
+*Set local inference endpoint (Ollama):*
 ```json
 {
   "providers": {
-    "openrouter": {
-      "apiKey": "sk-or-v1-xxx"
+    "ollama": {
+      "apiBase": "http://127.0.0.1:11434",
+      "apiKey": "ollama"
+    }
+  }
+}
+```
+
+*Or set vLLM endpoint:*
+```json
+{
+  "providers": {
+    "vllm": {
+      "apiBase": "http://127.0.0.1:8000/v1",
+      "apiKey": "local"
     }
   }
 }
@@ -140,7 +153,7 @@ Add or merge these **two parts** into your config (other options have defaults).
 {
   "agents": {
     "defaults": {
-      "model": "anthropic/claude-opus-4-5"
+      "model": "ollama/qwen2.5:14b"
     }
   }
 }
@@ -194,6 +207,8 @@ nanobot-internal
 Detailed design and rollout plan: `nanobot/internal_orchestrator/PLAN.md`.
 
 Chinese step-by-step deployment tutorial (local LLM API + Markdown tool service + scheduled daily report/project intro): `nanobot/internal_orchestrator/MINIMAL_DEPLOYMENT_ZH.md`.
+
+Full intranet operations + prompt/context + observability/dashboard guide: `INTRANET_GUIDE_ZH.md`.
 
 
 ## 💬 Chat Apps

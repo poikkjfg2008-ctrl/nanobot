@@ -185,7 +185,7 @@ class AgentDefaults(Base):
     """Default agent configuration."""
 
     workspace: str = "~/.nanobot/workspace"
-    model: str = "anthropic/claude-opus-4-5"
+    model: str = "ollama/qwen2.5:14b"
     max_tokens: int = 8192
     temperature: float = 0.1
     max_tool_iterations: int = 40
@@ -209,23 +209,8 @@ class ProviderConfig(Base):
 class ProvidersConfig(Base):
     """Configuration for LLM providers."""
 
-    custom: ProviderConfig = Field(default_factory=ProviderConfig)  # Any OpenAI-compatible endpoint
-    anthropic: ProviderConfig = Field(default_factory=ProviderConfig)
-    openai: ProviderConfig = Field(default_factory=ProviderConfig)
-    openrouter: ProviderConfig = Field(default_factory=ProviderConfig)
-    deepseek: ProviderConfig = Field(default_factory=ProviderConfig)
-    groq: ProviderConfig = Field(default_factory=ProviderConfig)
-    zhipu: ProviderConfig = Field(default_factory=ProviderConfig)
-    dashscope: ProviderConfig = Field(default_factory=ProviderConfig)  # 阿里云通义千问
+    ollama: ProviderConfig = Field(default_factory=ProviderConfig)
     vllm: ProviderConfig = Field(default_factory=ProviderConfig)
-    gemini: ProviderConfig = Field(default_factory=ProviderConfig)
-    moonshot: ProviderConfig = Field(default_factory=ProviderConfig)
-    minimax: ProviderConfig = Field(default_factory=ProviderConfig)
-    aihubmix: ProviderConfig = Field(default_factory=ProviderConfig)  # AiHubMix API gateway
-    siliconflow: ProviderConfig = Field(default_factory=ProviderConfig)  # SiliconFlow (硅基流动) API gateway
-    volcengine: ProviderConfig = Field(default_factory=ProviderConfig)  # VolcEngine (火山引擎) API gateway
-    openai_codex: ProviderConfig = Field(default_factory=ProviderConfig)  # OpenAI Codex (OAuth)
-    github_copilot: ProviderConfig = Field(default_factory=ProviderConfig)  # Github Copilot (OAuth)
 
 
 class HeartbeatConfig(Base):
@@ -309,27 +294,24 @@ class Config(BaseSettings):
             kw = kw.lower()
             return kw in model_lower or kw.replace("-", "_") in model_normalized
 
-        # Explicit provider prefix wins — prevents `github-copilot/...codex` matching openai_codex.
+        # Explicit provider prefix wins.
         for spec in PROVIDERS:
             p = getattr(self.providers, spec.name, None)
             if p and model_prefix and normalized_prefix == spec.name:
-                if spec.is_oauth or p.api_key:
+                if p.api_key or p.api_base:
                     return p, spec.name
 
         # Match by keyword (order follows PROVIDERS registry)
         for spec in PROVIDERS:
             p = getattr(self.providers, spec.name, None)
             if p and any(_kw_matches(kw) for kw in spec.keywords):
-                if spec.is_oauth or p.api_key:
+                if p.api_key or p.api_base:
                     return p, spec.name
 
-        # Fallback: gateways first, then others (follows registry order)
-        # OAuth providers are NOT valid fallbacks — they require explicit model selection
+        # Fallback by registry order
         for spec in PROVIDERS:
-            if spec.is_oauth:
-                continue
             p = getattr(self.providers, spec.name, None)
-            if p and p.api_key:
+            if p and (p.api_key or p.api_base):
                 return p, spec.name
         return None, None
 

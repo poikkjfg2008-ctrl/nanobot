@@ -18,6 +18,7 @@ from nanobot.application.orchestration import AgentOrchestrationEnvironment
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.base import LLMProvider
+from nanobot.observability.tool_trace import ToolTraceStore
 from nanobot.session.manager import Session, SessionManager
 
 if TYPE_CHECKING:
@@ -91,6 +92,7 @@ class AgentLoop:
         self._consolidating: set[str] = set()  # Session keys with consolidation in progress
         self._consolidation_tasks: set[asyncio.Task] = set()  # Strong refs to in-flight tasks
         self._consolidation_locks: dict[str, asyncio.Lock] = {}
+        self.trace_store = ToolTraceStore()
 
     def _set_tool_context(self, channel: str, chat_id: str, message_id: str | None = None) -> None:
         """Update context for all tools that need routing info."""
@@ -127,6 +129,7 @@ class AgentLoop:
         self,
         initial_messages: list[dict],
         on_progress: Callable[..., Awaitable[None]] | None = None,
+        trace_context: dict[str, Any] | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         """Run the agent iteration loop. Returns (final_content, tools_used, messages)."""
         messages = initial_messages
@@ -173,6 +176,14 @@ class AgentLoop:
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.info("Tool call: {}({})", tool_call.name, args_str[:200])
                     result = await self.tools.execute(tool_call.name, tool_call.arguments)
+                    self.trace_store.append({
+                        "event": "tool_call",
+                        "iteration": iteration,
+                        "tool": tool_call.name,
+                        "arguments": tool_call.arguments,
+                        "result": result[:2000] if isinstance(result, str) else str(result),
+                        **(trace_context or {}),
+                    })
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
@@ -187,6 +198,7 @@ class AgentLoop:
                 "without completing the task. You can try breaking the task into smaller steps."
             )
 
+        self.trace_store.append({"event": "final_answer", "content": final_content or "", **(trace_context or {})})
         return final_content, tools_used, messages
 
     async def run(self) -> None:
@@ -260,7 +272,10 @@ class AgentLoop:
                 history=history,
                 current_message=msg.content, channel=channel, chat_id=chat_id,
             )
-            final_content, _, all_msgs = await self._run_agent_loop(messages)
+            final_content, _, all_msgs = await self._run_agent_loop(
+                messages,
+                trace_context={"channel": channel, "chat_id": chat_id, "session_key": key, "sender_id": msg.sender_id},
+            )
             self._save_turn(session, all_msgs, 1 + len(history))
             self.sessions.save(session)
             return OutboundMessage(channel=channel, chat_id=chat_id,
@@ -348,7 +363,9 @@ class AgentLoop:
             ))
 
         final_content, _, all_msgs = await self._run_agent_loop(
-            initial_messages, on_progress=on_progress or _bus_progress,
+            initial_messages,
+            on_progress=on_progress or _bus_progress,
+            trace_context={"channel": msg.channel, "chat_id": msg.chat_id, "session_key": key, "sender_id": msg.sender_id},
         )
 
         if final_content is None:
