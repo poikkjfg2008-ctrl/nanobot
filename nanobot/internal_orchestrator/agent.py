@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover
 from nanobot.internal_orchestrator.llm import InternalLLMClient
 from nanobot.internal_orchestrator.settings import InternalOrchestratorSettings
 from nanobot.internal_orchestrator.tools import ToolRegistry, create_default_registry
+from nanobot.observability.tool_trace import ToolTraceStore
 
 
 SYSTEM_PROMPT = (
@@ -34,6 +35,7 @@ class InternalToolAgent:
         self._llm = llm_client
         self._registry = registry
         self._settings = settings
+        self._trace_store = ToolTraceStore()
 
     @classmethod
     def from_defaults(cls) -> "InternalToolAgent":
@@ -72,6 +74,16 @@ class InternalToolAgent:
                 args = self._parse_arguments(function_obj.get("arguments", "{}"))
                 result = await self._registry.execute(name, args)
                 trace.append({"tool": name, "arguments": args, "result": result})
+                self._trace_store.append(
+                    {
+                        "event": "tool_call",
+                        "channel": "internal_orchestrator",
+                        "session_key": session_id,
+                        "tool": name,
+                        "arguments": args,
+                        "result": result,
+                    }
+                )
                 messages.append(
                     {
                         "role": "tool",
