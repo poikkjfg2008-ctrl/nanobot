@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -113,20 +112,68 @@ class IntranetNanoAgent:
 
     @staticmethod
     def _extract_tool_call(content: str) -> str | None:
-        match = re.search(r"<tool_call>(.*?)</tool_call>", content, flags=re.DOTALL)
-        return match.group(1).strip() if match else None
+        opening_tags = ["<tool_call>", "<tool call>"]
+        closing_tags = ["</tool_call>", "</tool call>"]
+
+        start = -1
+        start_len = 0
+        for tag in opening_tags:
+            idx = content.find(tag)
+            if idx != -1 and (start == -1 or idx < start):
+                start = idx
+                start_len = len(tag)
+
+        if start == -1:
+            return None
+
+        end = -1
+        for tag in closing_tags:
+            idx = content.find(tag, start + start_len)
+            if idx != -1 and (end == -1 or idx < end):
+                end = idx
+
+        if end != -1:
+            return content[start + start_len : end].strip()
+
+        # 容错：若缺失闭合标签，尝试读取到文本末尾。
+        return content[start + start_len :].strip()
+
+
+    @staticmethod
+    def _parse_tool_payload(payload: str) -> dict[str, Any] | None:
+        candidates = [payload]
+
+        loose_candidate = payload.strip()
+        if loose_candidate and not loose_candidate.startswith("{"):
+            start = loose_candidate.find("{")
+            if start != -1:
+                loose_candidate = loose_candidate[start:]
+            candidates.append(loose_candidate)
+
+        if payload.count("{") > payload.count("}"):
+            candidates.append(payload + "}" * (payload.count("{") - payload.count("}")))
+
+        for candidate in candidates:
+            try:
+                if json_repair is not None:
+                    parsed = json_repair.loads(candidate)
+                else:
+                    parsed = json.loads(candidate)
+            except Exception:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
 
     def _execute_tool_call(self, payload: str) -> str:
-        try:
-            if json_repair is not None:
-                call_data = json_repair.loads(payload)
-            else:
-                call_data = json.loads(payload)
-        except Exception as exc:  # noqa: BLE001
-            return f"工具调用 JSON 解析失败: {exc}"
+        call_data = self._parse_tool_payload(payload)
+        if not isinstance(call_data, dict):
+            return "工具调用 JSON 解析失败: payload 不是对象"
 
         name = call_data.get("name")
-        args = call_data.get("args", {})
+        args = call_data.get("args")
+        if not isinstance(args, dict):
+            args = {}
         if name not in self.registry.tools:
             return f"工具未注册: {name}"
 

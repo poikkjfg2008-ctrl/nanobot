@@ -119,15 +119,14 @@ class InternalLLMClient:
         for msg in messages:
             role = msg.get("role")
             if role == "tool":
-                tool_name = msg.get("tool_name") or msg.get("name")
-                if tool_name:
-                    converted.append(
-                        {
-                            "role": "tool",
-                            "tool_name": tool_name,
-                            "content": msg.get("content", ""),
-                        }
-                    )
+                tool_name = InternalLLMClient._resolve_tool_name(msg)
+                converted.append(
+                    {
+                        "role": "tool",
+                        "tool_name": tool_name,
+                        "content": msg.get("content", ""),
+                    }
+                )
                 continue
 
             if role == "assistant":
@@ -167,6 +166,18 @@ class InternalLLMClient:
         except Exception:
             return {}
         return {}
+
+    @staticmethod
+    def _resolve_tool_name(message: dict[str, Any]) -> str:
+        explicit_name = message.get("tool_name") or message.get("name")
+        if isinstance(explicit_name, str) and explicit_name.strip():
+            return explicit_name.strip()
+
+        tool_call_id = message.get("tool_call_id")
+        if isinstance(tool_call_id, str) and tool_call_id.strip():
+            return f"unknown_tool_{tool_call_id.strip()}"
+
+        return "unknown_tool"
 
     def _repair_tool_call_from_content(self, content: str | None) -> dict[str, Any] | None:
         if not content:
