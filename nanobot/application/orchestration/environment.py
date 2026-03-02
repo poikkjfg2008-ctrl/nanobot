@@ -19,6 +19,7 @@ from nanobot.agent.context import ContextBuilder
 from nanobot.agent.subagent import SubagentManager
 from nanobot.agent.tools.cron import CronTool
 from nanobot.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from nanobot.agent.tools.md_api import MDReadTool, MDWriteTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.shell import ExecTool
@@ -91,6 +92,9 @@ class AgentOrchestrationEnvironment:
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(CronTool(self.cron_service))
+        # Register md-api tools
+        self.tools.register(MDReadTool())
+        self.tools.register(MDWriteTool())
 
     async def ensure_mcp_connected(self) -> None:
         """Connect to configured MCP servers once (lazy, retry-on-failure)."""

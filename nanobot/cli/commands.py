@@ -231,7 +231,6 @@ def _create_workspace_templates(workspace: Path):
 
 def _make_provider(config: Config):
     """Create the appropriate LLM provider from config."""
-    from nanobot.providers.litellm_provider import LiteLLMProvider
     model = config.agents.defaults.model
     provider_name = config.get_provider_name(model)
     p = config.get_provider(model)
@@ -248,13 +247,24 @@ def _make_provider(config: Config):
         console.print("Set it in ~/.nanobot/config.json (providers.ollama.api_base or providers.vllm.api_base)")
         raise typer.Exit(1)
 
-    return LiteLLMProvider(
-        api_key=p.api_key if p else None,
-        api_base=config.get_api_base(model),
-        default_model=model,
-        extra_headers=p.extra_headers if p else None,
-        provider_name=provider_name,
-    )
+    # Use OllamaProvider for Ollama to avoid LiteLLM compatibility issues
+    if spec.name == "ollama":
+        from nanobot.providers.ollama_provider import OllamaProvider
+        return OllamaProvider(
+            api_key=p.api_key if p else "ollama",
+            api_base=config.get_api_base(model),
+            default_model=model,
+        )
+    else:
+        # Use LiteLLM for other providers (vLLM, etc.)
+        from nanobot.providers.litellm_provider import LiteLLMProvider
+        return LiteLLMProvider(
+            api_key=p.api_key if p else None,
+            api_base=config.get_api_base(model),
+            default_model=model,
+            extra_headers=p.extra_headers if p else None,
+            provider_name=provider_name,
+        )
 
 
 # ============================================================================
