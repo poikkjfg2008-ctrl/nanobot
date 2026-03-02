@@ -33,3 +33,36 @@ def test_tool_call_execute():
 
     result = agent._execute_tool_call(payload)
     assert result == "3"
+
+
+def test_extract_tool_call_accepts_broken_close_tag():
+    agent = IntranetNanoAgent(
+        IntranetAgentConfig(base_url="http://localhost", api_key="test"),
+        registry=ToolRegistry(),
+        memory=TextMemory(),
+    )
+
+    content = '<tool_call>{"name": "md_read", "args": {"path": "biz/knowledge.md"}}</tool call'
+    extracted = agent._extract_tool_call(content)
+
+    assert extracted is not None
+    assert '"name": "md_read"' in extracted
+
+
+def test_execute_tool_call_can_repair_missing_brace():
+    registry = ToolRegistry()
+
+    @registry.register("md_read", "read markdown")
+    def md_read(path: str) -> str:
+        return f"ok:{path}"
+
+    agent = IntranetNanoAgent(
+        IntranetAgentConfig(base_url="http://localhost", api_key="test"),
+        registry=registry,
+        memory=TextMemory(),
+    )
+
+    broken_payload = '{"name": "md_read", "args": {"path": "biz/knowledge.md"}'
+    result = agent._execute_tool_call(broken_payload)
+
+    assert result == 'ok:biz/knowledge.md'

@@ -65,3 +65,25 @@ def test_repair_tool_call_from_content():
     )
     assert repaired is not None
     assert repaired["function"]["name"] == "run_dl_prediction"
+
+
+def test_to_ollama_messages_keeps_tool_message_without_name():
+    client = InternalLLMClient(settings=InternalOrchestratorSettings())
+
+    messages = [
+        {
+            "role": "tool",
+            "tool_call_id": "call-without-name",
+            "content": '{"status":"error","message":"tool not found"}',
+        }
+    ]
+
+    converted = client._to_ollama_messages(messages)
+
+    assert converted == [
+        {
+            "role": "tool",
+            "tool_name": "unknown_tool_call-without-name",
+            "content": '{"status":"error","message":"tool not found"}',
+        }
+    ]

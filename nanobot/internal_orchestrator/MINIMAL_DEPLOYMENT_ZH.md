@@ -297,3 +297,41 @@ crontab -e
 - 404：检查读写相对路径是否存在。
 - LLM 报错 `response format error`：网关返回格式与 OpenAI Chat Completions 不一致。
 - 报告内容空泛：降低 `temperature`，并在 skill 中约束输出模板。
+
+
+## 10. 针对“tool 参数正确但 API 未收到请求”的专项修复与调试
+
+你反馈的现象（如 `</tool call`、`<im_start|>` 混杂、参数看起来正确但工具未触发）通常来自**弱结构化输出**：
+
+- 工具标签不标准（`<tool call>` / 缺失 `</tool_call>`）。
+- JSON 少括号、混入前后缀标记。
+- 中间工具失败消息未被下一轮模型看到，导致模型反复错误调用。
+
+本仓库已针对这类情况做了两层增强：
+
+1. `internal_orchestrator/llm.py`：即使 tool 结果消息里缺失 `tool_name/name`，也会保留并转成兜底名称，避免失败上下文丢失。
+2. `nanobot/intranet.py`：对 `<tool_call>` 提取与 payload 解析增加容错（兼容 `<tool call>`、缺失闭合标签、缺右花括号）。
+
+### 10.1 建议的排障顺序（从外到内）
+
+1) **先看 API 服务端日志**（确认是否收到 `/read` 或 `/write`）。
+2) **打印模型原始输出**（确认是否生成了 `<tool_call>...</tool_call>`）。
+3) **打印提取后的 payload**（确认 payload 进入 `_execute_tool_call` 前后的差异）。
+4) **打印工具执行结果并回灌模型**（必须有 `<tool_result>...</tool_result>`）。
+5) **核对下一轮请求是否包含上一步 tool_result**（否则模型无法纠错）。
+
+### 10.2 建议临时日志点（生产可降级为 debug）
+
+- `IntranetNanoAgent.chat`：记录 `content`、`tool_payload`、`tool_result`。
+- `IntranetNanoAgent._execute_tool_call`：记录 `name`、`args`、异常栈。
+- Markdown API 服务端：记录 `path`、调用来源 IP、认证结果。
+
+### 10.3 快速自检脚本思路
+
+可用三组输入回归：
+
+1. 标准格式：`<tool_call>{"name":"md_read","args":{"path":"biz/knowledge.md"}}</tool_call>`
+2. 错误闭合：`<tool_call>{...}</tool call`
+3. 少右花括号：`{"name":"md_read","args":{"path":"biz/knowledge.md"}`
+
+预期：1/2/3 都能进入工具执行；若 2/3 失败，检查容错逻辑是否被覆盖。
