@@ -56,6 +56,7 @@ dev = [
 [project.scripts]
 nanobot = "nanobot.cli.commands:app"
 nanobot-internal = "nanobot.internal_orchestrator.main:main"
+nanobot-dashboard = "nanobot.dashboard_main:main"
 
 [build-system]
 requires = ["hatchling"]

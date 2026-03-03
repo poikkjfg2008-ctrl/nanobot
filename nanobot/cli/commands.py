@@ -1052,6 +1052,20 @@ def trace(limit: int = typer.Option(50, "--limit", "-n", help="Number of latest 
         console.print_json(data=item)
 
 
+@app.command()
+def dashboard(
+    host: str = typer.Option("0.0.0.0", "--host", help="Dashboard bind host"),
+    port: int = typer.Option(8090, "--port", help="Dashboard bind port"),
+):
+    """Run a local web dashboard for agent interaction and trace viewing."""
+    import uvicorn
+
+    from nanobot.dashboard_api import create_app
+
+    console.print(f"[green]Starting dashboard at http://{host}:{port}[/green]")
+    uvicorn.run(create_app(), host=host, port=port)
+
+
 # ============================================================================
 # Provider Management (Intranet Build)
 # ============================================================================

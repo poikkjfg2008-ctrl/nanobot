@@ -19,6 +19,7 @@ nanobot 是一个轻量级 Agent 框架，核心能力集中在三部分：
 - 运行入口主要是：
   - `nanobot agent`（CLI 对话）
   - `nanobot gateway`（多通道网关）
+  - `nanobot dashboard`（主 Agent Web Dashboard）
 
 ### 1.2 `nanobot/skills`（技能系统）
 
@@ -104,6 +105,12 @@ nanobot onboard
 nanobot agent
 ```
 
+主 Agent Dashboard：
+
+```bash
+nanobot dashboard --host 0.0.0.0 --port 8090
+```
+
 单轮模式：
 
 ```bash
@@ -150,6 +157,7 @@ nanobot-internal
 ## 5. 文档导航（重点）
 
 - 主 Agent 使用说明：[`USAGE_ZH.md`](USAGE_ZH.md)
+- 数字化工具接入实践：[`TOOL_INTEGRATION_PRACTICES_ZH.md`](TOOL_INTEGRATION_PRACTICES_ZH.md)
 - 内网部署教程（一步步）：[`INTRANET_DEPLOYMENT_ZH.md`](INTRANET_DEPLOYMENT_ZH.md)
 - 技能机制说明：[`nanobot/skills/README.md`](nanobot/skills/README.md)
 - 内网编排设计方案：[`nanobot/internal_orchestrator/PLAN.md`](nanobot/internal_orchestrator/PLAN.md)
