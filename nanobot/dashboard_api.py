@@ -48,6 +48,8 @@ def _make_provider(config):
         api_key=p.api_key if p else "dummy",
         api_base=config.get_api_base(model),
         default_model=model,
+        extra_headers=p.extra_headers if p else None,
+        provider_name=provider_name,
     )
 
 

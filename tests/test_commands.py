@@ -1,4 +1,5 @@
 import shutil
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ from typer.testing import CliRunner
 
 from nanobot.cli.commands import app
 from nanobot.config.schema import Config
+from nanobot.dashboard_api import _make_provider as dashboard_make_provider
 from nanobot.providers.litellm_provider import LiteLLMProvider
 from nanobot.providers.openai_codex_provider import _strip_model_prefix
 from nanobot.providers.registry import find_by_model
@@ -128,3 +130,36 @@ def test_litellm_provider_canonicalizes_github_copilot_hyphen_prefix():
 def test_openai_codex_strip_prefix_supports_hyphen_and_underscore():
     assert _strip_model_prefix("openai-codex/gpt-5.1-codex") == "gpt-5.1-codex"
     assert _strip_model_prefix("openai_codex/gpt-5.1-codex") == "gpt-5.1-codex"
+
+
+def test_litellm_provider_sets_local_cost_map_mode(monkeypatch):
+    monkeypatch.delenv("LITELLM_LOCAL_MODEL_COST_MAP", raising=False)
+
+    LiteLLMProvider(default_model="vllm/qwen2.5:14b")
+
+    assert os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] == "True"
+
+
+def test_dashboard_make_provider_forwards_litellm_metadata(monkeypatch):
+    config = Config()
+    config.agents.defaults.model = "vllm/qwen2.5:14b"
+    config.providers.vllm.api_base = "http://127.0.0.1:8000/v1"
+    config.providers.vllm.api_key = "test-key"
+    config.providers.vllm.extra_headers = {"APP-Code": "demo"}
+
+    captured = {}
+
+    class DummyProvider:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("nanobot.providers.litellm_provider.LiteLLMProvider", DummyProvider)
+
+    provider = dashboard_make_provider(config)
+
+    assert isinstance(provider, DummyProvider)
+    assert captured["api_key"] == "test-key"
+    assert captured["api_base"] == "http://127.0.0.1:8000/v1"
+    assert captured["default_model"] == "vllm/qwen2.5:14b"
+    assert captured["extra_headers"] == {"APP-Code": "demo"}
+    assert captured["provider_name"] == "vllm"

@@ -36,6 +36,10 @@ class LiteLLMProvider(LLMProvider):
         super().__init__(api_key, api_base)
         self.default_model = default_model
         self.extra_headers = extra_headers or {}
+
+        # In intranet deployments, block LiteLLM's remote model-cost-map fetch
+        # and rely on its packaged local backup to avoid noisy DNS warnings.
+        os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
         
         # Detect gateway / local deployment.
         # provider_name (from config key) is the primary signal;

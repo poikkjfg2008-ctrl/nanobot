@@ -335,3 +335,56 @@ crontab -e
 3. 少右花括号：`{"name":"md_read","args":{"path":"biz/knowledge.md"}`
 
 预期：1/2/3 都能进入工具执行；若 2/3 失败，检查容错逻辑是否被覆盖。
+
+---
+
+## 11. 企业内网常见问题处理
+
+### 8.1 `LiteLLM: Failed to fetch remote model cost map` 警告
+
+在无法访问 GitHub 的企业内网中，LiteLLM 会尝试拉取远程模型价格表，失败后回退到本地备份并打印 warning。
+
+nanobot 已在 LiteLLMProvider 初始化时默认设置：
+
+```bash
+export LITELLM_LOCAL_MODEL_COST_MAP=True
+```
+
+效果：
+- 不再依赖外网拉取模型价格表。
+- 保留本地回退能力，减少告警噪声。
+
+如果你有统一启动脚本，也可以显式写入该环境变量，便于运维排障时可见。
+
+### 8.2 `nanobot/skills` 如何做内网本地化
+
+技能加载优先级是：
+1. `~/.nanobot/workspace/skills/`（工作区自定义技能，优先级最高）
+2. 仓库内置 `nanobot/skills/`
+
+建议内网方案：
+
+1. **把生产技能放到工作区目录并纳入内网 Git 管理**
+   - 例如：`~/.nanobot/workspace/skills/daily-md-writer/SKILL.md`
+   - 可按业务团队维护私有 skill 仓库，再由 CI/CD 或配置管理下发到服务器。
+
+2. **避免运行依赖公网的技能**
+   - 例如 `clawhub` 这类联网检索/下载技能，在纯内网一般不可用。
+   - 可以在工作区放置同名 skill 进行“覆盖”（workspace 优先级更高），改为公司内网源。
+
+3. **为每个技能声明内网依赖**
+   - 在 frontmatter 的 `nanobot/openclaw` metadata 中声明 `requires.bins` / `requires.env`。
+   - 缺少依赖时，技能会被标记为 unavailable，避免运行时才失败。
+
+4. **推荐目录约定**
+
+```text
+~/.nanobot/workspace/
+  skills/
+    daily-md-writer/
+      SKILL.md
+      references/
+      scripts/
+```
+
+这样可以把技能文档、参考资料、脚本一起内网化打包，便于版本化和审计。
