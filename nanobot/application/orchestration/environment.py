@@ -10,6 +10,7 @@ This keeps AgentLoop focused on conversation control flow.
 
 from __future__ import annotations
 
+import os
 from contextlib import AsyncExitStack
 from pathlib import Path
 
@@ -86,15 +87,19 @@ class AgentOrchestrationEnvironment:
             timeout=self.exec_config.timeout,
             restrict_to_workspace=self.restrict_to_workspace,
         ))
-        self.tools.register(WebSearchTool(api_key=self.brave_api_key))
-        self.tools.register(WebFetchTool())
+
+        if os.getenv("NANOBOT_DISABLE_WEB_TOOLS", "").lower() not in {"1", "true", "yes"}:
+            self.tools.register(WebSearchTool(api_key=self.brave_api_key))
+            self.tools.register(WebFetchTool())
+
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound))
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(CronTool(self.cron_service))
-        # Register md-api tools
-        self.tools.register(MDReadTool())
-        self.tools.register(MDWriteTool())
+
+        md_mode = os.getenv("MD_API_MODE") or "local"
+        self.tools.register(MDReadTool(mode=md_mode, local_base_dir=str(self.workspace)))
+        self.tools.register(MDWriteTool(mode=md_mode, local_base_dir=str(self.workspace)))
 
     async def ensure_mcp_connected(self) -> None:
         """Connect to configured MCP servers once (lazy, retry-on-failure)."""
@@ -129,4 +134,3 @@ class AgentOrchestrationEnvironment:
                 pass
             self._mcp_stack = None
             self._mcp_connected = False
-

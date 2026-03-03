@@ -44,10 +44,10 @@ def _validate_url(url: str) -> tuple[bool, str]:
 
 
 class WebSearchTool(Tool):
-    """Search the web using Brave Search API."""
-    
+    """Search tool that supports Brave API or local search service."""
+
     name = "web_search"
-    description = "Search the web. Returns titles, URLs, and snippets."
+    description = "Search content. Supports Brave API and local enterprise search endpoint."
     parameters = {
         "type": "object",
         "properties": {
@@ -56,32 +56,43 @@ class WebSearchTool(Tool):
         },
         "required": ["query"]
     }
-    
-    def __init__(self, api_key: str | None = None, max_results: int = 5):
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        max_results: int = 5,
+        local_search_url: str | None = None,
+    ):
         self.api_key = api_key or os.environ.get("BRAVE_API_KEY", "")
         self.max_results = max_results
-    
+        self.local_search_url = local_search_url or os.environ.get("LOCAL_SEARCH_API_URL", "")
+
     async def execute(self, query: str, count: int | None = None, **kwargs: Any) -> str:
-        if not self.api_key:
-            return "Error: BRAVE_API_KEY not configured"
-        
+        n = min(max(count or self.max_results, 1), 10)
+
+        if self.local_search_url:
+            return await self._search_local_api(query=query, count=n)
+        if self.api_key:
+            return await self._search_brave(query=query, count=n)
+        return "Error: No search backend configured (set LOCAL_SEARCH_API_URL or BRAVE_API_KEY)"
+
+    async def _search_brave(self, query: str, count: int) -> str:
         try:
-            n = min(max(count or self.max_results, 1), 10)
             async with httpx.AsyncClient() as client:
                 r = await client.get(
                     "https://api.search.brave.com/res/v1/web/search",
-                    params={"q": query, "count": n},
+                    params={"q": query, "count": count},
                     headers={"Accept": "application/json", "X-Subscription-Token": self.api_key},
-                    timeout=10.0
+                    timeout=10.0,
                 )
                 r.raise_for_status()
-            
+
             results = r.json().get("web", {}).get("results", [])
             if not results:
                 return f"No results for: {query}"
-            
+
             lines = [f"Results for: {query}\n"]
-            for i, item in enumerate(results[:n], 1):
+            for i, item in enumerate(results[:count], 1):
                 lines.append(f"{i}. {item.get('title', '')}\n   {item.get('url', '')}")
                 if desc := item.get("description"):
                     lines.append(f"   {desc}")
@@ -89,10 +100,32 @@ class WebSearchTool(Tool):
         except Exception as e:
             return f"Error: {e}"
 
+    async def _search_local_api(self, query: str, count: int) -> str:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    self.local_search_url,
+                    json={"query": query, "count": count},
+                    timeout=10.0,
+                )
+                r.raise_for_status()
+            payload = r.json()
+            results = payload.get("results", [])
+            if not results:
+                return f"No results for: {query}"
+            lines = [f"Results for: {query} (local)\n"]
+            for i, item in enumerate(results[:count], 1):
+                lines.append(f"{i}. {item.get('title', '')}\n   {item.get('url', '')}")
+                if desc := item.get("snippet") or item.get("description"):
+                    lines.append(f"   {desc}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error: local search failed: {e}"
+
 
 class WebFetchTool(Tool):
     """Fetch and extract content from a URL using Readability."""
-    
+
     name = "web_fetch"
     description = "Fetch URL and extract readable content (HTML → markdown/text)."
     parameters = {
@@ -104,16 +137,15 @@ class WebFetchTool(Tool):
         },
         "required": ["url"]
     }
-    
+
     def __init__(self, max_chars: int = 50000):
         self.max_chars = max_chars
-    
+
     async def execute(self, url: str, extractMode: str = "markdown", maxChars: int | None = None, **kwargs: Any) -> str:
         from readability import Document
 
         max_chars = maxChars or self.max_chars
 
-        # Validate URL before fetching
         is_valid, error_msg = _validate_url(url)
         if not is_valid:
             return json.dumps({"error": f"URL validation failed: {error_msg}", "url": url}, ensure_ascii=False)
@@ -122,17 +154,15 @@ class WebFetchTool(Tool):
             async with httpx.AsyncClient(
                 follow_redirects=True,
                 max_redirects=MAX_REDIRECTS,
-                timeout=30.0
+                timeout=30.0,
             ) as client:
                 r = await client.get(url, headers={"User-Agent": USER_AGENT})
                 r.raise_for_status()
-            
+
             ctype = r.headers.get("content-type", "")
-            
-            # JSON
+
             if "application/json" in ctype:
                 text, extractor = json.dumps(r.json(), indent=2, ensure_ascii=False), "json"
-            # HTML
             elif "text/html" in ctype or r.text[:256].lower().startswith(("<!doctype", "<html")):
                 doc = Document(r.text)
                 content = self._to_markdown(doc.summary()) if extractMode == "markdown" else _strip_tags(doc.summary())
@@ -140,21 +170,27 @@ class WebFetchTool(Tool):
                 extractor = "readability"
             else:
                 text, extractor = r.text, "raw"
-            
+
             truncated = len(text) > max_chars
             if truncated:
                 text = text[:max_chars]
-            
-            return json.dumps({"url": url, "finalUrl": str(r.url), "status": r.status_code,
-                              "extractor": extractor, "truncated": truncated, "length": len(text), "text": text}, ensure_ascii=False)
+
+            return json.dumps({
+                "url": url,
+                "finalUrl": str(r.url),
+                "status": r.status_code,
+                "extractor": extractor,
+                "truncated": truncated,
+                "length": len(text),
+                "text": text,
+            }, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"error": str(e), "url": url}, ensure_ascii=False)
-    
-    def _to_markdown(self, html: str) -> str:
+
+    def _to_markdown(self, html_content: str) -> str:
         """Convert HTML to markdown."""
-        # Convert links, headings, lists before stripping tags
         text = re.sub(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>([\s\S]*?)</a>',
-                      lambda m: f'[{_strip_tags(m[2])}]({m[1]})', html, flags=re.I)
+                      lambda m: f'[{_strip_tags(m[2])}]({m[1]})', html_content, flags=re.I)
         text = re.sub(r'<h([1-6])[^>]*>([\s\S]*?)</h\1>',
                       lambda m: f'\n{"#" * int(m[1])} {_strip_tags(m[2])}\n', text, flags=re.I)
         text = re.sub(r'<li[^>]*>([\s\S]*?)</li>', lambda m: f'\n- {_strip_tags(m[1])}', text, flags=re.I)

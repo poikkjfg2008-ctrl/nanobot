@@ -1,30 +1,46 @@
-"""Markdown API tools for remote markdown file operations."""
+"""Markdown tools for local files or md-api service operations."""
 
 import os
+from pathlib import Path
 from typing import Any
 
 import httpx
 
 from nanobot.agent.tools.base import Tool
 
-# Configuration
-MD_API_BASE_URL = "http://0.0.0.0:18081"
-# Get token from environment, with a fallback default
-MD_API_TOKEN = os.getenv("MD_API_TOKEN") or "replace-with-strong-token"
+DEFAULT_MD_API_BASE_URL = "http://0.0.0.0:18081"
+DEFAULT_MD_API_TOKEN = "replace-with-strong-token"
+
+
+def _resolve_local_base_dir(local_base_dir: str | None) -> Path:
+    raw = local_base_dir or os.getenv("MD_API_LOCAL_BASE_DIR") or "~/.nanobot/workspace"
+    return Path(raw).expanduser().resolve()
+
+
+def _resolve_safe_local_path(path: str, local_base_dir: Path) -> Path:
+    target = (local_base_dir / path).resolve()
+    if local_base_dir not in target.parents and target != local_base_dir:
+        raise PermissionError(f"Path '{path}' escapes base dir '{local_base_dir}'")
+    return target
 
 
 class MDReadTool(Tool):
     """Tool to read markdown files via the md-api service."""
 
-    def __init__(self):
+    def __init__(self, *, mode: str | None = None, base_url: str | None = None, token: str | None = None,
+                 local_base_dir: str | None = None):
         self._client = None
+        self.mode = (mode or os.getenv("MD_API_MODE") or "http").lower()
+        self.base_url = base_url or os.getenv("MD_API_BASE_URL") or DEFAULT_MD_API_BASE_URL
+        self.token = token or os.getenv("MD_API_TOKEN") or DEFAULT_MD_API_TOKEN
+        self.local_base_dir = _resolve_local_base_dir(local_base_dir)
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
         if self._client is None:
             self._client = httpx.AsyncClient(
-                base_url=MD_API_BASE_URL,
-                headers={"X-API-Token": MD_API_TOKEN},
+                base_url=self.base_url,
+                headers={"X-API-Token": self.token},
                 timeout=30.0,
             )
         return self._client
@@ -35,7 +51,7 @@ class MDReadTool(Tool):
 
     @property
     def description(self) -> str:
-        return "Read a markdown file from the remote knowledge base via md-api service."
+        return "Read a markdown file from local storage or md-api service."
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -51,6 +67,16 @@ class MDReadTool(Tool):
         }
 
     async def execute(self, path: str, **kwargs: Any) -> str:
+        if self.mode == "local":
+            try:
+                file_path = _resolve_safe_local_path(path, self.local_base_dir)
+                if not file_path.exists():
+                    return f"Error: File not found: {path}"
+                content = file_path.read_text(encoding="utf-8")
+                return f"Successfully read {path} from local store:\n\n{content}"
+            except Exception as e:
+                return f"Error reading local markdown file: {str(e)}"
+
         try:
             client = await self._get_client()
             response = await client.post("/read", json={"path": path})
@@ -73,15 +99,20 @@ class MDReadTool(Tool):
 class MDWriteTool(Tool):
     """Tool to write markdown files via the md-api service."""
 
-    def __init__(self):
+    def __init__(self, *, mode: str | None = None, base_url: str | None = None, token: str | None = None,
+                 local_base_dir: str | None = None):
         self._client = None
+        self.mode = (mode or os.getenv("MD_API_MODE") or "http").lower()
+        self.base_url = base_url or os.getenv("MD_API_BASE_URL") or DEFAULT_MD_API_BASE_URL
+        self.token = token or os.getenv("MD_API_TOKEN") or DEFAULT_MD_API_TOKEN
+        self.local_base_dir = _resolve_local_base_dir(local_base_dir)
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
         if self._client is None:
             self._client = httpx.AsyncClient(
-                base_url=MD_API_BASE_URL,
-                headers={"X-API-Token": MD_API_TOKEN},
+                base_url=self.base_url,
+                headers={"X-API-Token": self.token},
                 timeout=30.0,
             )
         return self._client
@@ -92,7 +123,7 @@ class MDWriteTool(Tool):
 
     @property
     def description(self) -> str:
-        return "Write content to a markdown file in the remote knowledge base via md-api service."
+        return "Write content to a markdown file in local storage or md-api service."
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -112,6 +143,15 @@ class MDWriteTool(Tool):
         }
 
     async def execute(self, path: str, content: str, **kwargs: Any) -> str:
+        if self.mode == "local":
+            try:
+                file_path = _resolve_safe_local_path(path, self.local_base_dir)
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(content, encoding="utf-8")
+                return f"Successfully wrote {len(content)} bytes to local file {path}"
+            except Exception as e:
+                return f"Error writing local markdown file: {str(e)}"
+
         try:
             client = await self._get_client()
             response = await client.post("/write", json={"path": path, "content": content})
