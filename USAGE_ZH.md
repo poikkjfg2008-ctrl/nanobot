@@ -39,6 +39,14 @@ nanobot gateway
 
 适合多通道统一接入（由 channel manager 管理）。
 
+## 1.5 Web Dashboard（主 Agent）
+
+```bash
+nanobot dashboard --host 0.0.0.0 --port 8090
+```
+
+浏览器访问 `http://127.0.0.1:8090`，可进行交互调试并查看 trace。
+
 ---
 
 ## 2. Agent 核心工作流（`nanobot/agent`）
