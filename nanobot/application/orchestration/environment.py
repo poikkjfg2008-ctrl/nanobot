@@ -24,7 +24,8 @@ from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.spawn import SpawnTool
-from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
+# Network tools disabled for offline deployment
+# from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.base import LLMProvider
 
@@ -86,8 +87,9 @@ class AgentOrchestrationEnvironment:
             timeout=self.exec_config.timeout,
             restrict_to_workspace=self.restrict_to_workspace,
         ))
-        self.tools.register(WebSearchTool(api_key=self.brave_api_key))
-        self.tools.register(WebFetchTool())
+        # Network tools disabled for offline deployment
+        # self.tools.register(WebSearchTool(api_key=self.brave_api_key))
+        # self.tools.register(WebFetchTool())
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound))
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.cron_service:
